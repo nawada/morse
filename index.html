@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>モールス信号</title>
+</head>
+<body>
+<p>スペースキーを押す。気持ち長めに押すとツーになります。</p>
+
+<p id="word-zone"></p>
+<p id="render-zone"></p>
+
+<script>
+  (() => {
+    class Oscillator {
+      constructor(hz, type) {
+        this.audioCtx = new AudioContext();
+        this.oscillator = this.audioCtx.createOscillator();
+        this.gainNode = this.audioCtx.createGain();
+        this.pressing = false;
+        this.startTime = 0;
+        this.stopTime = 0;
+        this.codes = [];
+        this.alnum = {
+          '01': 'A', '1000': 'B', '1010': 'C',
+          '100': 'D', '0': 'E', '0010': 'F',
+          '110': 'G', '0000': 'H', '00': 'I',
+          '0111': 'J', '101': 'K', '0100': 'L',
+          '11': 'M', '10': 'N', '111': 'O',
+          '0110': 'P', '1101': 'Q', '010': 'R',
+          '000': 'S', '1': 'T', '001': 'U',
+          '0001': 'V', '011': 'W', '1001': 'X',
+          '1011': 'Y', '1100': 'Z',
+          '01111': '1', '00111': '2', '00011': '3',
+          '00001': '4', '00000': '5', '10000': '6',
+          '11000': '7', '11100': '8', '11110': '9',
+          '11111': '0',
+        };
+        this.timeoutId = null;
+
+        this.init(hz, type);
+      }
+
+      init(hz, type) {
+        if (!hz) {
+          hz = 440;
+        }
+        if (!type) {
+          type = 'sine';
+        }
+        this.gainNode.gain.value = 0.25;    // 音小さく
+        this.oscillator.type = type;
+        this.oscillator.frequency.value = hz;
+        this.oscillator.connect(this.gainNode);
+        this.oscillator.start();
+        setInterval(() => this.toWord(), 300);
+      }
+
+      toWord() {
+        if (+(new Date() - this.stopTime) <= 300 || this.pressing) {
+          return;
+        }
+        const code = this.codes.join('');
+        const alnum = this.alnum[code];
+        if (alnum) {
+          document.querySelector('#word-zone').innerText += alnum;
+        }
+        this.codes = [];
+      }
+
+      start() {
+        if (this.pressing) {
+          // キーが押されている状態の場合、何もしない
+          return;
+        }
+
+        if (this.codes.length > 0) {
+          this.toWord(+(new Date()) - this.startTime);
+        }
+
+        this.startTime = +(new Date());
+        this.gainNode.connect(this.audioCtx.destination);       // 音声出力とGainNodeを接続する→音が出る
+        this.pressing = true;
+      }
+
+      stop() {
+        this.gainNode.disconnect(this.audioCtx.destination);    // 音声出力とGainNodeを切断する→音が止まる
+        this.pressing = false;
+        this.rendering();
+        this.record();
+
+        if (this.timeoutId) {
+          clearTimeout(this.timeoutId);
+        }
+        this.stopTime = +(new Date());
+        this.timeoutId = setTimeout(() => {
+          this.toWord();
+        }, 300);
+      }
+
+      record() {
+        const duration = +(new Date()) - this.startTime;
+        if (duration <= 100) {
+          this.codes.push(0);
+        } else {
+          this.codes.push(1);
+        }
+      }
+
+      rendering() {
+        const element = document.querySelector('#render-zone');
+        const currentText = document.querySelector('#render-zone').innerText;
+
+        const duration = +(new Date()) - this.startTime;
+        // console.log(duration);
+        if (duration <= 100) {
+          // 100ミリ秒以下の場合、「トン」と判定する
+          element.innerText = `${currentText}・`;
+        } else {
+          // 100ミリを超える場合は「ツー」
+          element.innerText = `${currentText}－`;
+        }
+      }
+    }
+
+    const osc = new Oscillator(880, 'triangle');
+
+    document.querySelector('body').addEventListener('keydown', (e) => {
+      if (e.code.match(/space/i)) {
+        osc.start();
+      }
+    });
+
+    document.querySelector('body').addEventListener('keyup', (e) => {
+      if (e.code.match(/space/i)) {
+        osc.stop();
+      }
+    });
+  })();
+</script>
+</body>
+</html>
